@@ -1,0 +1,4 @@
+"0",""
+"0","participants <-readr::read_tsv(here::here(""data/participants.tsv"")) |> "
+"0","  janitor::clean_names()"
+"0","head(participants, 10)"

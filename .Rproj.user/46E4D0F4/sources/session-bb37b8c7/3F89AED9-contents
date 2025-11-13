@@ -1,0 +1,156 @@
+---
+title: "AIREADI Participants: Data Availability Snapshot"
+author: "Zhongyu Li"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = TRUE)
+library(here)
+pkgs <- c("tidyverse", "janitor", "readr", "knitr", "kableExtra", "scales", "lubridate", "glue")
+to_install <- pkgs[!pkgs %in% rownames(installed.packages())]
+if (length(to_install)) install.packages(to_install, quiet = TRUE)
+invisible(lapply(pkgs, library, character.only = TRUE))
+
+```
+
+## Introduction
+
+This short report uses a participants-level TSV from the AIREADI study to explore what data are available per participant across clinical, wearable, and imaging modalities.
+
+### Objectives
+
+- Load a local TSV file containing participant metadata.
+- Produce a table summarizing availability (present vs. absent) across modalities.
+- Create a figure visualizing availability by modality.
+- Briefly describe the table and the figure.
+
+```{r, read data}
+
+participants <-readr::read_tsv(here::here("data/participants.tsv")) |> 
+  janitor::clean_names()
+head(participants, 10)
+```
+```{r}
+
+# Coerce different encodings to logical
+to_logical <- function(x) {
+  if (is.logical(x)) return(x)
+  if (is.numeric(x)) return(x == 1)
+  if (is.character(x)) return(tolower(trimws(x)) %in% c("true","t","1","yes","y"))
+  suppressWarnings(as.logical(x))
+}
+
+# Choose availability columns by name pattern
+avail_cols <- participants |>
+  dplyr::select(dplyr::matches("^(cardiac_ecg|clinical_data|environment|retinal_|wearable)"))
+
+# Fallback: any likely logical columns
+if (ncol(avail_cols) == 0) {
+  avail_cols <- participants |>
+    dplyr::select(where(~ is.logical(.x) || is.numeric(.x) || is.character(.x)))
+}
+
+# Summarize
+avail_summary <- avail_cols |>
+  dplyr::mutate(dplyr::across(dplyr::everything(), to_logical)) |>
+  dplyr::summarise(dplyr::across(dplyr::everything(), ~ sum(.x %in% TRUE, na.rm = TRUE))) |>
+  tidyr::pivot_longer(dplyr::everything(), names_to = "modality", values_to = "n_available") |>
+  dplyr::mutate(
+    n_total = nrow(participants),
+    prop_available = n_available / n_total,
+    modality_pretty = modality |> stringr::str_replace_all("_", " ") |> stringr::str_to_title()
+  ) |>
+  dplyr::arrange(dplyr::desc(prop_available))
+
+# Show table
+knitr::kable(
+  avail_summary |>
+    dplyr::select(modality = modality_pretty, n_available, n_total, prop_available) |>
+    dplyr::mutate(prop_available = scales::percent(prop_available, accuracy = 0.1)),
+  caption = "Availability of each modality among participants.",
+  align = "lrrr",
+  digits = 3
+) |>
+  kableExtra::kable_styling(full_width = FALSE)
+
+
+``` 
+```{r}
+ggplot(avail_summary, aes(x = reorder(modality_pretty, prop_available), y = prop_available)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    x = NULL,
+    y = "Participants with data available",
+    title = "Data availability by modality"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+**Figure description: data availability is high for most modality (95-100%) except for wearable activity monitor and a retinal fluorescence lifetime imaging ophthalmology.**
+
+```{r}
+# ---- table: study group counts + mean age ----
+if ("study_group" %in% names(participants)) {
+  sg_tbl <- participants |>
+    dplyr::mutate(age = suppressWarnings(as.numeric(age))) |>
+    dplyr::group_by(study_group) |>
+    dplyr::summarise(
+      n = dplyr::n(),
+      mean_age = mean(age, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(dplyr::desc(n))
+
+  knitr::kable(
+    sg_tbl,
+    digits = 1,
+    caption = "Participants and mean age by study group."
+  ) |>
+    kableExtra::kable_styling(full_width = FALSE)
+}
+```
+
+
+```{r, plot 1}
+# ---- plot A: participants per clinical site (bar) ----
+site_counts <- participants |>
+  dplyr::count(clinical_site, name = "n") |>
+  dplyr::arrange(dplyr::desc(n))
+
+ggplot(site_counts, aes(x = reorder(clinical_site, n), y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Participants per clinical site",
+    x = "Clinical site",
+    y = "Number of participants"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+**Figure description: USCD appears to have less participants compared to other two sites** 
+
+```{r, plot 2}
+# ---- plot B: study-group bars within each clinical site (faceted) ----
+sg_site <- participants |>
+  dplyr::count(clinical_site, study_group, name = "n")
+
+ggplot(sg_site, aes(x = study_group, y = n)) +
+  geom_col() +
+  facet_wrap(~ clinical_site, scales = "free_x") +
+  coord_flip() +
+  labs(
+    title = "Study-group counts within each clinical site",
+    x = "Study group",
+    y = "Number of participants"
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+**Figure description: the distribution of study groups appears to be similar across groups** 
