@@ -1,24 +1,20 @@
-# Makefile to build the project report and helper artifacts
-
-.PHONY: all report figures clean
+.PHONY: all report figures clean install
 
 all: report
 
-# Generate example figures then render the R Markdown report
+install:
+	@echo "Restoring R package environment..."
+	Rscript -e "if (!requireNamespace('renv', quietly=TRUE)) install.packages('renv', repos='https://cloud.r-project.org'); renv::restore()"
+
 report: figures
 	@echo "Rendering R Markdown report..."
-	Rscript -e "if (!requireNamespace('rmarkdown', quietly=TRUE)) install.packages('rmarkdown', repos='https://cloud.r-project.org'); rmarkdown::render('particiants.Rmd', output_file = 'particiants.html')"
+	Rscript -e "if (!requireNamespace('rmarkdown', quietly=TRUE)) install.packages('rmarkdown', repos='https://cloud.r-project.org'); rmarkdown::render('participants.Rmd', output_file = 'participants.html')"
 
-# Run the Python script that creates example CGM PNGs
 figures:
-	@echo "Generating example CGM figures..."
-	@if [ -x ./.venv/bin/python ]; then \
-		./.venv/bin/python codes/plot_cgm_examples.py; \
-	else \
-		python3 codes/plot_cgm_examples.py; \
-	fi
+	@echo "Generating CGM figures with R..."
+	Rscript codes/cgm_plots.R
 
 clean:
 	@echo "Cleaning generated files..."
-	-rm -f particiants.html
-	-rm -rf codes/outputs/*.png
+	-rm -f participants.html
+	-rm -rf outputs/*.png

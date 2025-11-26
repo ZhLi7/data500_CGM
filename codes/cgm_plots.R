@@ -1,0 +1,150 @@
+# cgm_plots.R
+
+library(jsonlite)
+
+# ---- helper: load one CGM JSON into a data.frame ----
+load_cgm_json <- function(json_path) {
+  # json_path: character, path to a Dexcom JSON file
+  
+  # read JSON; keep as list, not autore-flatten
+  data <- fromJSON(json_path, simplifyVector = FALSE)
+  
+  cgm_list <- data$body$cgm
+  if (is.null(cgm_list) || length(cgm_list) == 0L) {
+    return(data.frame())
+  }
+  
+  records <- lapply(cgm_list, function(rec) {
+    # use tryCatch to skip malformed entries
+    tryCatch({
+      ts  <- rec$effective_time_frame$time_interval$start_date_time
+      val <- rec$blood_glucose$value
+      data.frame(
+        datetime = ts,
+        glucose  = val,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) {
+      NULL
+    })
+  })
+  
+  # drop NULLs and bind
+  records <- Filter(Negate(is.null), records)
+  if (length(records) == 0L) {
+    return(data.frame())
+  }
+  
+  df <- do.call(rbind, records)
+  
+  # convert types
+  df$datetime <- as.POSIXct(
+    df$datetime,
+    format = "%Y-%m-%dT%H:%M:%OS",  # e.g. 2023-08-11T06:05:00
+    tz = "UTC"
+  )
+  df$glucose  <- suppressWarnings(as.numeric(df$glucose))  # "High" -> NA
+  df <- df[!is.na(df$glucose), , drop = FALSE]
+  
+  if (nrow(df) == 0L) {
+    return(df)
+  }
+  
+  df <- df[order(df$datetime), , drop = FALSE]
+  rownames(df) <- NULL
+  df
+}
+
+# ---- helper: plot one participant ----
+plot_participant <- function(df, participant_id, age, study_group, out_path) {
+  # df: data.frame with datetime, glucose
+  # out_path: file path to PNG
+  
+  dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
+  
+  png(out_path, width = 1200, height = 420, res = 150)
+  par(mar = c(4, 4, 3, 1))
+  
+  plot(df$datetime, df$glucose,
+       type = "l", lwd = 0.8,
+       xlab = "Time", ylab = "Glucose (mg/dL)")
+  points(df$datetime, df$glucose, pch = 16, cex = 0.4)
+  
+  title(main = sprintf("ID: %s  |  Age: %d  |  Group: %s",
+                       participant_id, age, study_group))
+  dev.off()
+}
+
+# ---- main driver ----
+main <- function(base_dir = file.path("data")) {
+  # base_dir should contain:
+  #   participants.tsv
+  #   wearable_blood_glucose/continuous_glucose_monitoring/dexcom_g6/
+  
+  dex_path <- file.path(
+    base_dir,
+    "wearable_blood_glucose",
+    "continuous_glucose_monitoring",
+    "dexcom_g6"
+  )
+  participants_tsv <- file.path(base_dir, "participants.tsv")
+  
+  if (!dir.exists(dex_path)) {
+    stop("Dexcom path not found: ", dex_path)
+  }
+  if (!file.exists(participants_tsv)) {
+    stop("participants.tsv not found: ", participants_tsv)
+  }
+  
+  # read participants metadata; treat id as character
+  participants <- read.delim(
+    participants_tsv,
+    sep = "\t",
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  participants$participant_id <- as.character(participants$participant_id)
+  rownames(participants) <- participants$participant_id
+  
+  # list participant folders and pick first five
+  p_folders <- list.dirs(dex_path, recursive = FALSE, full.names = TRUE)
+  p_folders <- sort(p_folders)
+  sample_folders <- head(p_folders, 7)
+  
+  out_dir <- file.path(getwd(), "outputs")
+  
+  for (p in sample_folders) {
+    pid <- basename(p)  # folder name as participant id (string)
+    
+    # find *_DEX.json
+    json_files <- list.files(p, pattern = "_DEX\\.json$", full.names = TRUE)
+    if (length(json_files) == 0L) {
+      next
+    }
+    
+    df <- load_cgm_json(json_files[1])
+    if (nrow(df) == 0L) {
+      next
+    }
+    
+    # metadata
+    if (pid %in% rownames(participants)) {
+      meta <- participants[pid, , drop = FALSE]
+      age <- if ("age" %in% names(meta)) as.integer(meta$age) else -1L
+      study_group <- if ("study_group" %in% names(meta))
+        as.character(meta$study_group) else "unknown"
+    } else {
+      age <- -1L
+      study_group <- "unknown"
+    }
+    
+    out_path <- file.path(out_dir, paste0(pid, ".png"))
+    plot_participant(df, pid, age, study_group, out_path)
+    message("Saved plot for ", pid, " to ", out_path)
+  }
+}
+
+# run if script is executed directly
+if (sys.nframe() == 0) {
+  main()
+}
