@@ -1,0 +1,37 @@
+# Git files
+.git
+.gitignore
+.github
+
+# R files
+.Rproj.user
+.Rhistory
+.RData
+.Rprofile
+*.Rproj
+
+# Generated outputs
+outputs/
+report/
+participants.html
+
+# renv cache (we restore from renv.lock instead)
+renv/library/
+renv/staging/
+renv/local/
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.log
+*.tmp

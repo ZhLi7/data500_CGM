@@ -2,3 +2,15 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Generated report outputs (keep directory structure, ignore content)
+report/*.html
+report/*.png
+!report/.gitkeep
+
+# Docker outputs in local outputs/ directory
+outputs/*.png
+
+# Local virtual environments
+.venv/
+__pycache__/
