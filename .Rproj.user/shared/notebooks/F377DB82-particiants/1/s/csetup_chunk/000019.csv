@@ -1,7 +1,0 @@
-"0","knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = TRUE)"
-"0","library(here)"
-"0","pkgs <- c(""tidyverse"", ""janitor"", ""readr"", ""knitr"", ""kableExtra"", ""scales"", ""lubridate"", ""glue"")"
-"0","to_install <- pkgs[!pkgs %in% rownames(installed.packages())]"
-"0","if (length(to_install)) install.packages(to_install, quiet = TRUE)"
-"0","invisible(lapply(pkgs, library, character.only = TRUE))"
-"0",""
