@@ -14,3 +14,6 @@ outputs/*.png
 # Local virtual environments
 .venv/
 __pycache__/
+
+# Testing and development documentation
+TEST/
